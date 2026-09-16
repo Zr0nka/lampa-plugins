@@ -12,7 +12,7 @@
 
     // Верстка для отображения QR-кода и инструкции по получению токена в Telegram
     var botHtml = $('<div class="myBot" style="line-height: 1;color: #ffffff;font-family: &quot;SegoeUI&quot;, sans-serif;font-size: 1em;box-sizing: border-box;outline: none;user-select: none;display: flex;-webkit-box-align: start;align-items: flex-start;position: relative;background-color: rgba(255, 255, 255, 0.1);border-radius: 0.3em;margin: 1.5em 2em;flex-wrap: wrap;">' +
-        '<img class="ad-server__qr" style="opacity: 1; border-radius: 0.3em; overflow: hidden; box-sizing: border-box; margin: auto 0.6em auto auto;" src="https://bylampa.online/img/qr_sync.png">' +
+        '<img class="ad-server__qr" style="opacity: 1; border-radius: 0.3em; overflow: hidden; box-sizing: border-box; margin: auto 0.6em auto auto;" src="http://bylampa.online/img/qr_sync.png">' +
         '<div class="ad-server__text" style="flex: 1; line-height: 1.8;">' +
         'Для получения токена перейдите в наш телеграм бот <span style="background-color: #ffe216; border-radius: 0.3em; padding: 0.15em; color: #000;">@bylampa_sync_bot</span> или на сайт <span style="background-color: #ffe216; border-radius: 0.3em; padding: 0.15em; color: #000;">sync.bylampa.online</span>' +
         '</div>' +

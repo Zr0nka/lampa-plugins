@@ -5,7 +5,7 @@
     // Проверка авторства сборки. Если это не "bylampa", плагин работать не будет.
     if (Lampa.Manifest.author !== 'bylampa') {
       //  Lampa.Noty.show('Ошибка доступа');
-     //   return;
+      //  return;
     }
 
     var SERVER_URL = 'http://94.156.115.58:803';

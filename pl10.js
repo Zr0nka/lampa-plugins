@@ -1,8 +1,4 @@
-// Переопределяем функцию получения списка заблокированных адресов, чтобы она возвращала пустой массив
-network$6.silent = function(url, successCallback, errorCallback) {
-    // Просто вызываем successCallback с пустым массивом, игнорируя реальный запрос
-    successCallback([]);
-};
+
 
 // Переопределяем класс VideoBlock, чтобы он не воспроизводил рекламу
 class VideoBlock {

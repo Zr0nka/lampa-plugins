@@ -42,10 +42,6 @@
         }
       });
       _0x1b988d();
-      if (Lampa.Manifest.origin !== 'bylampa') {
-        Lampa.Noty.show("Ошибка доступа");
-        return;
-      }
       Lampa.Listener.follow('request_secuses', function (_0x55e51a) {
         if (_0x55e51a.data.blocked) {
           var _0x4303a0 = Lampa.Activity.active();

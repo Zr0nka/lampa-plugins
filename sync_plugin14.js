@@ -131,11 +131,14 @@
     function mapOf(arr) { var m = Object.create(null); arr.forEach(function (e) { m[e.k] = e; }); return m; }
 
     function readFavoriteRaw() {
+      var d = Lampa.Storage.get('favorite', '{}');
+      if (isObj(d) && Object.keys(d).some(function (k) { return k !== 'card' && Array.isArray(d[k]) && d[k].length > 0; })) {
+        return d;
+      }
       try {
         var r = JSON.parse(localStorage.getItem('favorite') || '{}');
         if (isObj(r)) return r;
       } catch (e) {}
-      var d = Lampa.Storage.get('favorite', '{}');
       return isObj(d) ? d : {};
     }
 
@@ -291,6 +294,7 @@
         var skey = 'kv_' + catId, base = shadow[skey] || {};
 
         if (res.full) {
+          if (!Object.keys(incSet).length) return; // Не стираем локальные настройки/плагины, если на сервере категория пуста
           var localCur = readLocalKV(catId), merged = {}, ns = {};
           Object.keys(incSet).forEach(function (k) {
             ns[k] = incSet[k];
@@ -449,9 +453,9 @@
     function applyFileView(res, allowedMap, replace) {
       if (!allowedMap['file_view']) return;
       var ids = Object.keys(res.file_view || {});
-      var key = fvKey(), local = (res.full && replace) ? {} : Lampa.Storage.get(key, '{}'), ch = !!(res.full && replace);
+      if (!ids.length) return; // Не стираем локальные таймкоды, если на сервере пусто
+      var key = fvKey(), local = Lampa.Storage.get(key, '{}'), ch = false;
       if (!isObj(local)) local = {};
-      if (!ids.length && !ch) return;
 
       ids.forEach(function (h) {
         var inc = res.file_view[h], cur = local[h];
@@ -476,7 +480,7 @@
       SET_KEYS.forEach(function (key) {
         if (!allowedMap[key] || !sets[key]) return;
         var add = sets[key].add || [], del = sets[key].del || [];
-        if (!res.full && !add.length && !del.length) return;
+        if (!add.length && !del.length) return; // Не затираем локальный список, если на сервере категория пуста
 
         var local = flat(key), lmap = mapOf(local), entries, ch = true;
         if (res.full) {
@@ -512,9 +516,24 @@
       var catMap = customMap || getCats(K_AUTO, false);
       var since = forceFull ? 0 : parseInt(localStorage.getItem(K_REV) || '0', 10) || 0;
 
+      var prevRev = parseInt(localStorage.getItem(K_REV) || '0', 10) || 0;
       return request('GET', q('/lampa/state') + '&since=' + since).then(function (res) {
         pulling = false;
         if (!res || !res.success) throw new Error('Bad state');
+
+        // Защита от стирания локальных данных, если сервер был сброшен (ревизия сервера стала 0 или меньше локальной)
+        if ((prevRev > 0 && res.rev < prevRev) || res.rev === 0) {
+          shadow = {};
+          saveShadow();
+          if (res.rev === 0 && !replace) {
+            // Сервер пуст после сброса — ничего не удаляем локально, а ставим локальные данные в очередь на отправку
+            SET_KEYS.forEach(function (k) { if (catMap[k]) dirtySets[k] = true; });
+            KV_KEYS.forEach(function (k) { if (catMap[k]) dirtyKV[k] = true; });
+            localStorage.setItem(K_REV, '0');
+            schedulePush(500);
+            return res;
+          }
+        }
 
         applyFileView(res, catMap, replace);
         applySets(res, catMap, replace);
@@ -612,10 +631,13 @@
         SET_KEYS.forEach(function (k) {
           if (!catMap[k]) return;
           var entries = flat(k);
+          if (!entries.length) return; // Не затираем сервер пустым списком при экспорте
           sets[k] = { add: entries.map(function (e) { return e.w; }), del: [], replace: true };
           if (k === 'favorite') {
             Object.assign(cards, cardsFor(entries));
             sentDetails.push('избранное/история: ' + entries.length);
+          } else if (k === 'torrents_view') {
+            sentDetails.push('торренты: ' + entries.length);
           }
         });
 

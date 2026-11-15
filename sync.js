@@ -2,9 +2,9 @@
   'use strict';
 
   var SERVER = 'http://217.25.226.225:933';
-  var PUSH_DELAY = 10000;
-  var RETRY_DELAY = 15000;
-  var PULL_INTERVAL = 60000;
+  var PUSH_DELAY = 20000;
+  var RETRY_DELAY = 120000;
+  var PULL_INTERVAL = 300000;
 
   var K_TOKEN = 'sync_token', K_REV = 'sync_rev', K_SHADOW = 'sync_shadow';
   var K_FVAT = 'sync_fv_at', K_AUTO = 'sync_auto_cats', K_MANUAL = 'sync_manual_cats';

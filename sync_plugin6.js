@@ -274,20 +274,10 @@
 
             if (event.name !== 'acc') return;
 
-            if (token()) {
-                $('div[data-name="acc_auth"]').hide();
-
-                // после скрытия поля токена переносим фокус на «Выйти из аккаунта» (ищем по имени, а не по номеру в списке)
-                var focusTarget = document.querySelector('div[data-name="acc_exit"]');
-
-                if (focusTarget) {
-                    Lampa.Controller.focus(focusTarget);
-                    Lampa.Controller.toggle('settings_component');
-                }
-            }
-            else {
-                $('div > span:contains("Аккаунт подключен")').hide();
-            }
+            // Прячем классом hide, а не .hide(): Lampa при установке фокуса пропускает только элементы с этим классом.
+            // Если скрыть стилем, пульт «залипает» на невидимом поле токена и меню не реагирует.
+            if (token()) $('div[data-name="acc_auth"]').addClass('hide');
+            else $('div > span:contains("Аккаунт подключен")').closest('div').addClass('hide');
         });
 
         Lampa.SettingsApi.addParam({

@@ -1,7 +1,7 @@
 (function () {
     'use strict';
 
-    var SERVER = 'http://192.168.1.1:8787';
+    var SERVER = 'http://ВАШ_IP:8787';
 
     var PUSH_DELAY = 3000;          // пауза после последнего изменения перед отправкой
     var RETRY_DELAY = 15000;        // повтор отправки при ошибке

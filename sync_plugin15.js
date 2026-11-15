@@ -2,7 +2,7 @@
   'use strict';
 
   var SERVER = 'http://217.25.226.225:933';
-  var PUSH_DELAY = 3000;
+  var PUSH_DELAY = 10000;
   var RETRY_DELAY = 15000;
   var PULL_INTERVAL = 60000;
 

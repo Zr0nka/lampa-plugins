@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  var SERVER = 'http://ВАШ_IP:8787';
+  var SERVER = 'http://217.25.226.225:8787';
   var PUSH_DELAY = 10000;
   var RETRY_DELAY = 15000;
   var PULL_INTERVAL = 60000;

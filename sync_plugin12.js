@@ -2,7 +2,7 @@
   'use strict';
 
   var SERVER = 'http://217.25.226.225:933';
-  var PUSH_DELAY = 10000;
+  var PUSH_DELAY = 3000;
   var RETRY_DELAY = 15000;
   var PULL_INTERVAL = 60000;
 
@@ -40,7 +40,7 @@
     function token() { return localStorage.getItem(K_TOKEN); }
     function active() { return !!token() && Lampa.Storage.field('acc_sync'); }
     function synced() { return localStorage.getItem(K_REV) !== null; }
-    function fvKey() { return (Lampa.Timeline.filename && Lampa.Timeline.filename()) || 'file_view'; }
+    function fvKey() { return (Lampa.Timeline && Lampa.Timeline.filename && Lampa.Timeline.filename()) || 'file_view'; }
     function clone(o) { return JSON.parse(JSON.stringify(o)); }
     function isObj(o) { return o && typeof o === 'object' && !Array.isArray(o); }
     function has(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
@@ -87,11 +87,11 @@
     // ---------- Категории (Фон vs Кнопка) ----------
 
     function getCats(sKey, isM) {
-      var raw = loadJson(sKey, null);
-      if (raw) return raw;
-      var def = {};
-      CATEGORIES.forEach(function (c) { def[c.id] = isM ? c.defM : c.defA; });
-      return def;
+      var raw = loadJson(sKey, null), out = {};
+      CATEGORIES.forEach(function (c) {
+        out[c.id] = (raw && has(raw, c.id)) ? !!raw[c.id] : (isM ? c.defM : c.defA);
+      });
+      return out;
     }
 
     function isAutoOn(id) { return !!getCats(K_AUTO, false)[id]; }
@@ -125,33 +125,46 @@
       });
     }
 
-    // ---------- Наборы (sets) ----------
+    // ---------- Наборы (sets): favorite, online_view, torrents_view, search_history ----------
 
     function kk(key, w) { return key === 'favorite' ? w.c + ':' + w.v : String(w); }
     function mapOf(arr) { var m = Object.create(null); arr.forEach(function (e) { m[e.k] = e; }); return m; }
+
+    function readFavoriteRaw() {
+      try {
+        var r = JSON.parse(localStorage.getItem('favorite') || '{}');
+        if (isObj(r)) return r;
+      } catch (e) {}
+      var d = Lampa.Storage.get('favorite', '{}');
+      return isObj(d) ? d : {};
+    }
 
     function flat(key) {
       var out = [], seen = Object.create(null);
       function put(k, w) { if (!seen[k]) { seen[k] = 1; out.push({ k: k, w: w }); } }
 
       if (key === 'favorite') {
-        var data = Lampa.Storage.get('favorite', '{}');
-        if (isObj(data)) Object.keys(data).forEach(function (cat) {
+        var data = readFavoriteRaw();
+        Object.keys(data).forEach(function (cat) {
           var list = data[cat];
           if (cat !== 'card' && Array.isArray(list)) {
-            for (var i = list.length - 1; i >= 0; i--) put(cat + ':' + list[i], { c: cat, v: list[i] });
+            for (var i = list.length - 1; i >= 0; i--) {
+              if (list[i] !== null && list[i] !== undefined && list[i] !== '') {
+                put(cat + ':' + list[i], { c: cat, v: list[i] });
+              }
+            }
           }
         });
       } else {
         var arr = Lampa.Storage.get(key, '[]');
-        if (Array.isArray(arr)) arr.forEach(function (v) { if (typeof v === 'string' && v) put(v, v); });
+        if (Array.isArray(arr)) arr.forEach(function (v) { if (v !== null && v !== undefined && String(v)) put(String(v), String(v)); });
       }
       return out;
     }
 
     function cardsFor(entries) {
-      var data = Lampa.Storage.get('favorite', '{}'), out = {}, ids = {};
-      if (!isObj(data) || !Array.isArray(data.card)) return out;
+      var data = readFavoriteRaw(), out = {}, ids = {};
+      if (!Array.isArray(data.card)) return out;
       entries.forEach(function (e) { ids[String(e.w.v)] = 1; });
       data.card.forEach(function (c) { if (c && has(ids, String(c.id))) out[String(c.id)] = c; });
       return out;
@@ -162,8 +175,7 @@
         Lampa.Storage.set(key, entries.map(function (e) { return e.w; }), true);
         return;
       }
-      var data = Lampa.Storage.get('favorite', '{}');
-      if (!isObj(data)) data = {};
+      var data = readFavoriteRaw();
       var oldCards = Array.isArray(data.card) ? data.card : [], cats = {}, need = {}, list = [], have = {};
 
       Object.keys(data).forEach(function (c) { if (c !== 'card' && Array.isArray(data[c])) cats[c] = []; });
@@ -180,6 +192,7 @@
       for (var c in cats) data[c] = cats[c];
       data.card = list;
 
+      localStorage.setItem('favorite', JSON.stringify(data));
       Lampa.Storage.set('favorite', data, true);
       try { Lampa.Favorite.init(); Lampa.Favorite.read(true); } catch (e) {}
     }
@@ -199,13 +212,13 @@
       };
     }
 
-    // ---------- Словари и прочие данные (KV) ----------
+    // ---------- Словари и настройки (KV) ----------
 
     function allowSetting(k) {
       if (!k || EXCLUDE[k] || k === fvKey()) return false;
       if (/^(sync_|weather_|cache_|online_choice_|file_view|metric_|timetable|notices)/.test(k)) return false;
       var raw = localStorage.getItem(k);
-      return raw !== null && raw.length <= 8000;
+      return raw !== null && raw.length <= 15000;
     }
 
     function parseOcKey(ck) {
@@ -252,13 +265,21 @@
       return { set: set, del: del };
     }
 
-    // Безопасная запись сырой строки в localStorage без двойной сериализации массивов
     function writeRawSetting(k, rawStr) {
-      if (!allowSetting(k)) return false;
+      if (!k || EXCLUDE[k] || k === fvKey()) return false;
+      if (/^(sync_|weather_|cache_|online_choice_|file_view|metric_|timetable|notices)/.test(k)) return false;
       var prev = localStorage.getItem(k);
       if (prev === rawStr) return false;
       localStorage.setItem(k, rawStr);
-      if (Lampa.Storage && Lampa.Storage.cache) delete Lampa.Storage.cache[k];
+      // Обновляем внутренний кеш Lampa.Storage только для не-массивов, чтобы не сломать menu_sort
+      if (Lampa.Storage && Lampa.Storage.set) {
+        try {
+          var parsed = JSON.parse(rawStr);
+          if (!Array.isArray(parsed)) Lampa.Storage.set(k, parsed, true);
+        } catch (e) {
+          Lampa.Storage.set(k, rawStr, true);
+        }
+      }
       return true;
     }
 
@@ -293,12 +314,12 @@
             var list = [];
             Object.keys(merged).forEach(function (k) { try { list.push(JSON.parse(merged[k])); } catch (e) {} });
             Lampa.Storage.set(catId, list, true);
+            settingsChanged = true;
           } else if (catId === 'settings') {
             if (replace) {
               Object.keys(localCur).forEach(function (k) {
-                if (!has(merged, k) && allowSetting(k)) {
+                if (!has(merged, k)) {
                   localStorage.removeItem(k);
-                  if (Lampa.Storage && Lampa.Storage.cache) delete Lampa.Storage.cache[k];
                   settingsChanged = true;
                 }
               });
@@ -336,21 +357,21 @@
             Object.keys(incSet).forEach(function (k) {
               try { if (!has(map, k)) order.push(k); map[k] = JSON.parse(incSet[k]); sh[k] = incSet[k]; ch = true; } catch (e) {}
             });
-            if (ch) Lampa.Storage.set(catId, order.filter(function (k) { return has(map, k); }).map(function (k) { return map[k]; }), true);
+            if (ch) {
+              Lampa.Storage.set(catId, order.filter(function (k) { return has(map, k); }).map(function (k) { return map[k]; }), true);
+              settingsChanged = true;
+            }
           } else if (catId === 'settings') {
             incDel.forEach(function (k) {
-              if (allowSetting(k) && localStorage.getItem(k) !== null) {
+              if (localStorage.getItem(k) !== null) {
                 localStorage.removeItem(k);
-                if (Lampa.Storage && Lampa.Storage.cache) delete Lampa.Storage.cache[k];
                 settingsChanged = true;
               }
               delete sh[k];
             });
             Object.keys(incSet).forEach(function (k) {
-              if (allowSetting(k)) {
-                if (writeRawSetting(k, incSet[k])) settingsChanged = true;
-                sh[k] = incSet[k];
-              }
+              if (writeRawSetting(k, incSet[k])) settingsChanged = true;
+              sh[k] = incSet[k];
             });
           }
         }
@@ -445,7 +466,7 @@
       });
       if (ch) {
         Lampa.Storage.set(key, local, true);
-        Lampa.Timeline.read();
+        if (Lampa.Timeline && Lampa.Timeline.read) Lampa.Timeline.read();
         bumpFvAt(res.file_view || {});
       }
     }
@@ -514,7 +535,7 @@
       });
     }
 
-    // 1. Двустороннее объединение (используется при включении фоновой синхронизации и старте)
+    // 1. Двустороннее объединение (при включении фоновой синхронизации и старте)
     function syncMerge(catMap, silent) {
       if (!token()) return silent || Lampa.Noty.show('Вы не зашли в аккаунт');
       if (!Object.keys(catMap).some(function (k) { return !!catMap[k]; })) {
@@ -560,28 +581,42 @@
       });
     }
 
-    // 2. Ручной ЭКСПОРТ на сервер: принудительно записывает выбранные категории с этого устройства на сервер
+    // 2. Ручной ЭКСПОРТ на сервер: гарантированно отправляет выбранные категории и перезаписывает сервер
     function exportToServer(catMap) {
       if (!token()) return Lampa.Noty.show('Вы не зашли в аккаунт');
       if (!Object.keys(catMap).some(function (k) { return !!catMap[k]; })) {
         return Lampa.Noty.show('Не выбрано ни одной категории для экспорта');
       }
-      Lampa.Noty.show('Экспорт выбранных категорий на сервер...');
+      Lampa.Noty.show('Экспорт на сервер...');
 
       var wait = pushPromise ? pushPromise : Promise.resolve();
       return wait.then(function () {
         var fv = {}, sets = {}, cards = {}, kvOut = {}, kvSnap = {};
+        var now = Date.now(), sentDetails = [];
 
         if (catMap['file_view']) {
-          var local = Lampa.Storage.get(fvKey(), '{}');
-          if (isObj(local)) for (var h in local) if (isObj(local[h])) fv[h] = local[h];
+          var local = Lampa.Storage.get(fvKey(), '{}'), fvCount = 0;
+          if (isObj(local)) {
+            for (var h in local) {
+              if (isObj(local[h])) {
+                var rec = clone(local[h]);
+                rec.updated = Math.max(now, (rec.updated || 0) + 1);
+                fv[h] = rec;
+                fvCount++;
+              }
+            }
+          }
+          sentDetails.push('таймкодов: ' + fvCount);
         }
 
         SET_KEYS.forEach(function (k) {
           if (!catMap[k]) return;
           var entries = flat(k);
           sets[k] = { add: entries.map(function (e) { return e.w; }), del: [], replace: true };
-          if (k === 'favorite') Object.assign(cards, cardsFor(entries));
+          if (k === 'favorite') {
+            Object.assign(cards, cardsFor(entries));
+            sentDetails.push('избранное/история: ' + entries.length);
+          }
         });
 
         KV_KEYS.forEach(function (catId) {
@@ -589,9 +624,12 @@
           var cur = readLocalKV(catId);
           kvOut[catId] = { set: cur, del: [], overwrite: true, replace: true };
           kvSnap[catId] = cur;
+          if (catId === 'settings') sentDetails.push('настроек: ' + Object.keys(cur).length);
         });
 
+        // Важно: передаём bulk: false и export: true, чтобы сервер перезаписал любые существующие записи
         return request('POST', q('/lampa/push'), {
+          bulk: false,
           export: true,
           file_view: fv,
           sets: sets,
@@ -614,33 +652,36 @@
             shadow['kv_' + catId] = clone(kvSnap[catId] || {});
           });
           saveShadow();
-          Lampa.Noty.show('Экспорт завершён (обновлено записей на сервере: ' + res.changed + ')');
+          var info = sentDetails.length ? ' (' + sentDetails.join(', ') + ')' : '';
+          Lampa.Noty.show('Экспорт завершён, обновлено на сервере: ' + res.changed + info);
         });
       })['catch'](function (e) {
         log('export error', e.message);
-        Lampa.Noty.show('Ошибка экспорта на сервер');
+        Lampa.Noty.show('Ошибка экспорта: ' + e.message);
       });
     }
 
-    // 3. Ручной ИМПОРТ с сервера: забирает выбранные категории с сервера и применяет на этом устройстве
+    // 3. Ручной ИМПОРТ с сервера: загружает полное состояние с сервера и сразу перезагружает Lampa при изменении настроек
     function importFromServer(catMap) {
       if (!token()) return Lampa.Noty.show('Вы не зашли в аккаунт');
       if (!Object.keys(catMap).some(function (k) { return !!catMap[k]; })) {
         return Lampa.Noty.show('Не выбрано ни одной категории для импорта');
       }
-      Lampa.Noty.show('Импорт выбранных категорий с сервера...');
+      Lampa.Noty.show('Импорт с сервера...');
 
       if (catMap['file_view']) pendingFV = {};
       SET_KEYS.forEach(function (k) { if (catMap[k]) delete dirtySets[k]; });
       KV_KEYS.forEach(function (k) { if (catMap[k]) delete dirtyKV[k]; });
 
+      pulling = false; // сбрасываем блокировку, чтобы ручной импорт сработал мгновенно
       return pull(true, true, catMap).then(function (got) {
-        if (!got) throw new Error('import pull failed');
-        var msg = 'Импорт с сервера завершён';
-        if (got._settingsChanged || (catMap['plugins'] && got.kv && got.kv.plugins)) {
-          msg += '. Перезапустите Lampa для применения настроек';
+        if (!got) throw new Error('pull failed');
+        if (got._settingsChanged || catMap['settings'] || catMap['plugins']) {
+          Lampa.Noty.show('Импорт завершён! Перезапуск Lampa для применения настроек...');
+          setTimeout(function () { window.location.reload(); }, 1500);
+        } else {
+          Lampa.Noty.show('Импорт выбранных категорий завершён');
         }
-        Lampa.Noty.show(msg);
       })['catch'](function (e) {
         log('import error', e.message);
         Lampa.Noty.show('Ошибка импорта с сервера');
@@ -661,7 +702,7 @@
 
     // ---------- События и таймеры ----------
 
-    if (Lampa.Timeline.listener && Lampa.Timeline.listener.follow) {
+    if (Lampa.Timeline && Lampa.Timeline.listener && Lampa.Timeline.listener.follow) {
       Lampa.Timeline.listener.follow('update', function (e) {
         if (active() && isAutoOn('file_view') && e && e.data && e.data.road) {
           pendingFV[e.data.hash] = clone(e.data.road);

@@ -277,7 +277,8 @@
             if (token()) {
                 $('div[data-name="acc_auth"]').hide();
 
-                var focusTarget = document.querySelector('#app > div.settings > div.settings__content.layer--height > div.settings__body > div > div > div > div > div:nth-child(5)');
+                // после скрытия поля токена переносим фокус на «Выйти из аккаунта» (ищем по имени, а не по номеру в списке)
+                var focusTarget = document.querySelector('div[data-name="acc_exit"]');
 
                 if (focusTarget) {
                     Lampa.Controller.focus(focusTarget);

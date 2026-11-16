@@ -2,7 +2,7 @@
   'use strict';
 
   var DEFAULT_ADDR = '192.168.1.1:1234';
-  var PUSH_DELAY = 20000;
+  var PUSH_DELAY = 10000;
   var RETRY_DELAY = 120000;
   var PULL_INTERVAL = 300000;
 
